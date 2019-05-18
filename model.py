@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class EncoderCNN(nn.Module):
     def __init__(self, embed_size):
@@ -23,11 +24,80 @@ class EncoderCNN(nn.Module):
 
 class DecoderRNN(nn.Module):
     def __init__(self, embed_size, hidden_size, vocab_size, num_layers=1):
-        pass
+        # init super clss
+        super(DecoderRNN, self).__init__()
+        
+        self.embed_dim = embed_size
+        self.hidden_dim = hidden_size
+        self.vocab_dim = vocab_size
+        
+        # embedding layer that converts word into vector
+        self.word_emedding = nn.Embedding(vocab_size, embed_size)
+        
+        # define LSTM (input = embedding_dim; output = hidden_size)
+        self.lstm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+        
+        self.fc = nn.Linear(hidden_size, vocab_size)
+        
+        # initialize the hidden state 
+        #self.hidden = self.init_hidden()
+        
+    def init_hidden(self, batch_size):
+
+        # output (num_layers, batch_size, hidden_size)
+        return (torch.zeros((1, batch_size, self.hidden_size), device=device),
+                torch.zeros((1, batch_size, self.hidden_size), device=device))
     
     def forward(self, features, captions):
-        pass
+        # features and embedding to be stacked together
+        features = features.view(len(features), 1, -1)
+        
+        self.hidden = self.init_hidden(batch_size)
+        
+        # embedding without the end
+        embeddings = self.word_emedding(captions[:, :-1])
+        
+        # concatenation of feature and embedding
+        features = features.unsqueeze(1)
+        inputs = torch.cat((features, embeddings), dim=1)
+        
+        lstm_out, self.hidden = self.lstm(inputs, self.hidden)
+        
+        word_outputs = self.fc(lstm_out)
+        
+        return word_outputs
+        
+    def init_hidden(self, batch_size):
+
+        # output (num_layers, batch_size, hidden_size)
+        return (torch.zeros((1, batch_size, self.hidden_dim), device=device),
+                torch.zeros((1, batch_size, self.hidden_dim), device=device))
 
     def sample(self, inputs, states=None, max_len=20):
         " accepts pre-processed image tensor (inputs) and returns predicted sentence (list of tensor ids of length max_len) "
-        pass
+        """
+        :param inputs (tensor): (batch_size=1, caption_length=1, embed_size) features input
+        :param max_len (int): caption maximal length
+        :return predictions (list): list of integer
+        """
+        batch_size = inputs.size(0) # inputs -> (1, caption_length=1, embed_size)
+        self.hidden = self.init_hidden(batch_size) # hidden -> (num_layers, batch_size=1, hidden_size)
+
+        predictions = []
+
+        for _ in range(max_len):
+            lstm_out, self.hidden = self.lstm(inputs, self.hidden) # lstm_out -> (1, caption_length=1, hidden_size)
+            outputs = self.fc(lstm_out) # outputs (1,caption_length=1, vocab_size)
+            outputs = outputs.squeeze(1) # outputs (batch_size=1, vocab_size)
+            _, max_idx = torch.max(outputs, dim=1) # max_idx -> (1,)
+            predictions.append(max_idx.cpu().numpy()[0].item()) # return python integer
+
+            if max_idx == 1:
+                break
+
+            inputs = self.word_emedding(max_idx) # output (batch_size=1, embed_size)
+            inputs = inputs.unsqueeze(1) # output (batch_size=1, caption_length=1, embed_size)
+
+        return predictions
+    
+ 
