@@ -67,36 +67,30 @@ class DecoderRNN(nn.Module):
         
         return word_outputs
         
-    def init_hidden(self, batch_size):
+    def init_hidden(self, batch_size, device):
 
-        # output (num_layers, batch_size, hidden_size)
         return (torch.zeros((1, batch_size, self.hidden_dim), device=device),
                 torch.zeros((1, batch_size, self.hidden_dim), device=device))
 
-    def sample(self, inputs, states=None, max_len=20):
-        " accepts pre-processed image tensor (inputs) and returns predicted sentence (list of tensor ids of length max_len) "
-        """
-        :param inputs (tensor): (batch_size=1, caption_length=1, embed_size) features input
-        :param max_len (int): caption maximal length
-        :return predictions (list): list of integer
-        """
-        batch_size = inputs.size(0) # inputs -> (1, caption_length=1, embed_size)
-        self.hidden = self.init_hidden(batch_size) # hidden -> (num_layers, batch_size=1, hidden_size)
+    def sample(self, inputs, states=None, max_len=20, device=device):
+
+        batch_size = inputs.size(0) 
+        self.hidden = self.init_hidden(batch_size, device) 
 
         predictions = []
 
         for _ in range(max_len):
-            lstm_out, self.hidden = self.lstm(inputs, self.hidden) # lstm_out -> (1, caption_length=1, hidden_size)
-            outputs = self.fc(lstm_out) # outputs (1,caption_length=1, vocab_size)
-            outputs = outputs.squeeze(1) # outputs (batch_size=1, vocab_size)
-            _, max_idx = torch.max(outputs, dim=1) # max_idx -> (1,)
-            predictions.append(max_idx.cpu().numpy()[0].item()) # return python integer
+            lstm_out, self.hidden = self.lstm(inputs, self.hidden) 
+            outputs = self.fc(lstm_out) 
+            outputs = outputs.squeeze(1) 
+            _, max_idx = torch.max(outputs, dim=1) 
+            predictions.append(max_idx.cpu().numpy()[0].item()) 
 
             if max_idx == 1:
                 break
 
-            inputs = self.word_emedding(max_idx) # output (batch_size=1, embed_size)
-            inputs = inputs.unsqueeze(1) # output (batch_size=1, caption_length=1, embed_size)
+            inputs = self.word_emedding(max_idx) 
+            inputs = inputs.unsqueeze(1) 
 
         return predictions
     
